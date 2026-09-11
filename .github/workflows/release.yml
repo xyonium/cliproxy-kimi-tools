@@ -46,6 +46,10 @@ jobs:
           CGO_ENABLED=1 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
             go build -buildmode=c-shared -o "dist/${{ matrix.goos }}/${{ matrix.goarch }}/kimi-tools.${{ matrix.ext }}" .
 
+      - name: Install zip on ubuntu
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zip
+
       - name: Zip plugin asset
         shell: bash
         env:
@@ -56,12 +60,25 @@ jobs:
           set -euo pipefail
           VER="${VERSION#v}"
           cd "dist/${GOOS_}/${GOARCH_}"
-          # bsdtar's -a flag auto-selects zip when the output suffix is .zip;
-          # available on all GitHub-hosted runners (incl. windows-2025).
-          mkdir -p _pkg
-          cp "kimi-tools.${EXT}" "_pkg/kimi-tools.${EXT}"
-          tar -a -c -f "../../kimi-tools_${VER}_${GOOS_}_${GOARCH_}.zip" -C _pkg "kimi-tools.${EXT}"
+          OUT="../../kimi-tools_${VER}_${GOOS_}_${GOARCH_}.zip"
+          if command -v 7z >/dev/null 2>&1; then
+            # windows-2025 ships 7z.
+            mkdir -p _pkg && cp "kimi-tools.${EXT}" "_pkg/kimi-tools.${EXT}"
+            7z a -tzip "$OUT" "./_pkg/*" >/dev/null
+          else
+            zip -9 -j "$OUT" "kimi-tools.${EXT}"
+          fi
           ls -la "../.."
+
+      - name: Verify asset is a zip
+        shell: bash
+        env:
+          GOOS_: ${{ matrix.goos }}
+          GOARCH_: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          VER="${VERSION#v}"
+          file "dist/kimi-tools_${VER}_${GOOS_}_${GOARCH_}.zip" | grep -i "zip archive"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
