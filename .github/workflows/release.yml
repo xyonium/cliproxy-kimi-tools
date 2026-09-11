@@ -46,16 +46,25 @@ jobs:
 
       - name: Zip plugin asset
         shell: bash
+        env:
+          GOOS_: ${{ matrix.goos }}
+          GOARCH_: ${{ matrix.goarch }}
+          EXT: ${{ matrix.ext }}
         run: |
           set -euo pipefail
-          cd "dist/${{ matrix.goos }}/${{ matrix.goarch }}"
-          zip -9 -j "../../../kimi-tools_${VERSION#v}_${{ matrix.goos }}_${{ matrix.goarch }}.zip" "kimi-tools.${{ matrix.ext }}"
+          VER="${VERSION#v}"
+          cd "dist/${GOOS_}/${GOARCH_}"
+          zip -9 -j "../../kimi-tools_${VER}_${GOOS_}_${GOARCH_}.zip" "kimi-tools.${EXT}"
+          ls -la "../.."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
+        env:
+          GOOS_: ${{ matrix.goos }}
+          GOARCH_: ${{ matrix.goarch }}
         with:
-          name: kimi-tools_${VERSION#v}_${{ matrix.goos }}_${{ matrix.goarch }}.zip
-          path: "dist/kimi-tools_${VERSION#v}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
+          name: kimi-tools_${{ env.VERSION }}_${{ matrix.goos }}_${{ matrix.goarch }}.zip
+          path: dist/kimi-tools_*_${{ matrix.goos }}_${{ matrix.goarch }}.zip
           if-no-files-found: error
 
   release:
@@ -67,21 +76,23 @@ jobs:
         with:
           path: artifacts
 
-      - name: Generate checksums
+      - name: Collect artifacts and checksums
         shell: bash
         run: |
-          cd artifacts
-          for dir in */; do
-            [ -d "$dir" ] || continue
-            cp -v "$dir"*.zip . 2>/dev/null || true
-          done
+          set -euo pipefail
+          mkdir -p release
           shopt -s nullglob
+          for f in artifacts/*/*.zip; do
+            cp -v "$f" release/
+          done
+          cd release
           sha256sum *.zip > checksums.txt
+          ls -la
 
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**.zip
+          files: release/*.zip
           fail_on_unmatched_files: true
           generate_release_notes: true
         env:
