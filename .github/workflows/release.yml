@@ -54,7 +54,11 @@ jobs:
           set -euo pipefail
           VER="${VERSION#v}"
           cd "dist/${GOOS_}/${GOARCH_}"
-          zip -9 -j "../../kimi-tools_${VER}_${GOOS_}_${GOARCH_}.zip" "kimi-tools.${EXT}"
+          # bsdtar's -a flag auto-selects zip when the output suffix is .zip;
+          # available on all GitHub-hosted runners (incl. windows-2025).
+          mkdir -p _pkg
+          cp "kimi-tools.${EXT}" "_pkg/kimi-tools.${EXT}"
+          tar -a -c -f "../../kimi-tools_${VER}_${GOOS_}_${GOARCH_}.zip" -C _pkg "kimi-tools.${EXT}"
           ls -la "../.."
 
       - name: Upload artifact
