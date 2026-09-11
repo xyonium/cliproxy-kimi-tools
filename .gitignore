@@ -1,0 +1,6 @@
+dist/
+*.h
+*.so
+*.dylib
+*.dll
+kimi-tools.zip

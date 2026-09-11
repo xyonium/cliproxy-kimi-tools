@@ -1,0 +1,88 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux,   goarch: amd64, runner: ubuntu-24.04,       ext: so }
+          - { goos: linux,   goarch: arm64, runner: ubuntu-24.04-arm,   ext: so }
+          - { goos: darwin,  goarch: amd64, runner: macos-15-intel,     ext: dylib }
+          - { goos: darwin,  goarch: arm64, runner: macos-15,           ext: dylib }
+          - { goos: windows, goarch: amd64, runner: windows-2025,       ext: dll }
+          - { goos: windows, goarch: arm64, runner: windows-11-arm,     ext: dll }
+
+    env:
+      VERSION: ${{ github.ref_name }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+
+      - name: Run tests
+        run: go test ./...
+
+      - name: Build plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/${{ matrix.goos }}/${{ matrix.goarch }}"
+          CGO_ENABLED=1 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} \
+            go build -buildmode=c-shared -o "dist/${{ matrix.goos }}/${{ matrix.goarch }}/kimi-tools.${{ matrix.ext }}" .
+
+      - name: Zip plugin asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "dist/${{ matrix.goos }}/${{ matrix.goarch }}"
+          zip -9 -j "../../../kimi-tools_${VERSION#v}_${{ matrix.goos }}_${{ matrix.goarch }}.zip" "kimi-tools.${{ matrix.ext }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kimi-tools_${VERSION#v}_${{ matrix.goos }}_${{ matrix.goarch }}.zip
+          path: "dist/kimi-tools_${VERSION#v}_${{ matrix.goos }}_${{ matrix.goarch }}.zip"
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub release
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          cd artifacts
+          for dir in */; do
+            [ -d "$dir" ] || continue
+            cp -v "$dir"*.zip . 2>/dev/null || true
+          done
+          shopt -s nullglob
+          sha256sum *.zip > checksums.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**.zip
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
