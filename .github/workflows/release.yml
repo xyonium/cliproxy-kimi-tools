@@ -21,7 +21,9 @@ jobs:
           - { goos: darwin,  goarch: amd64, runner: macos-15-intel,     ext: dylib }
           - { goos: darwin,  goarch: arm64, runner: macos-15,           ext: dylib }
           - { goos: windows, goarch: amd64, runner: windows-2025,       ext: dll }
-          - { goos: windows, goarch: arm64, runner: windows-11-arm,     ext: dll }
+          # windows/arm64 needs an ARM64-cross C toolchain (llvm-mingw); the
+          # Go windows-11-arm runner image lacks one, so cgo c-shared fails
+          # to assemble (gcc_arm64.S). Add back once you install llvm-mingw.
 
     env:
       VERSION: ${{ github.ref_name }}
